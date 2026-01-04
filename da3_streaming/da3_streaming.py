@@ -624,6 +624,7 @@ class DA3_Streaming:
             )
 
         print("Apply alignment")
+        torch.cuda.empty_cache()
         self.sim3_list = accumulate_sim3_transforms(self.sim3_list)
         for chunk_idx in range(len(self.chunk_indices) - 1):
             print(f"Applying {chunk_idx+1} -> {chunk_idx} (Total {len(self.chunk_indices)-1})")

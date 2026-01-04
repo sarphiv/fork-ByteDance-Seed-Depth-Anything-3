@@ -15,20 +15,22 @@
 # Adapted from [VGGT-Long](https://github.com/DengKaiCQ/VGGT-Long)
 
 import time
-from typing import List, Tuple
+from importlib import import_module
+from typing import Any, List, Tuple
+
 import numpy as np
 import pypose as pp
 import torch
 from fastloop.solve_python import solve_system_py
 from scipy.spatial.transform import Rotation as R
 
-cpp_version = False
-try:
-    import sim3solve
 
-    cpp_version = True
-except Exception:
-    print("Sim3solve of C++ Version failed, Will using Python Version.")
+def _try_import_sim3solve() -> Any | None:
+    """Return the sim3solve module when available, otherwise None."""
+    try:
+        return import_module("sim3solve")
+    except Exception:
+        return None
 
 
 class Sim3LoopOptimizer:
@@ -53,9 +55,14 @@ class Sim3LoopOptimizer:
         self.solve_system_version = self.config["Loop"]["SIM3_Optimizer"][
             "lang_version"
         ]  # choose between 'python' and 'cpp'
+        self._sim3solve: Any | None = None
 
-        if not cpp_version:
-            self.solve_system_version = "python"
+        assert self.solve_system_version in {"cpp", "python"}, "Unknown SIM3 solver version"
+        if self.solve_system_version == "cpp":
+            self._sim3solve = _try_import_sim3solve()
+            if self._sim3solve is None:
+                print("Sim3solve of C++ Version failed, Will using Python Version.") # Retain previous warning
+                self.solve_system_version = "python"
 
     def numpy_to_pypose_sim3(self, s: float, R_mat: np.ndarray, t_vec: np.ndarray) -> pp.Sim3:
         """Convert numpy s,R,t to pypose Sim3"""
@@ -259,7 +266,7 @@ class Sim3LoopOptimizer:
             try:  # Solve linear system
                 begin_time = time.time()
                 if self.solve_system_version == "cpp":
-                    (delta_pose,) = sim3solve.solve_system(
+                    (delta_pose,) = self._sim3solve.solve_system( # type: ignore
                         J_Ginv_i, J_Ginv_j, iii, jjj, resid, 0.0, lmbda, -1
                     )
                 elif self.solve_system_version == "python":
